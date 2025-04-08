@@ -1,0 +1,50 @@
+schedules:
+  - cron: '0 0 * * SUN'
+    displayName: 'Every Sunday at midnight'
+    branches:
+      include:
+        - renovate/*
+        - master
+    always: true
+trigger: none
+parameters:
+  - name: xyz
+    default: true
+    type: boolean
+    displayName: xyz
+  - name: zyx
+    default: true
+    type: boolean
+    displayName: zyx
+variables:
+  - name: npm_config_cache
+    value: $(Pipeline.Workspace)/.npm
+pool:
+  vmImage: ubuntu-latest
+steps:
+  - bash: |
+      if [[ "${SYSTEM_DEBUG,,}" == "true" ]]; then
+        echo "##vso[task.setvariable variable=LOG_LEVEL]debug"
+      else
+        echo "##vso[task.setvariable variable=LOG_LEVEL]info"
+      fi
+  - task: Cache@2
+    inputs:
+      key: 'package-lock.json'
+      path: $(npm_config_cache)
+    displayName: Cache NPM packages
+  - task:
+    inputs:
+      workingFile: .npmrc
+  - ${{ each parameter in parameters }}:
+      - bash: |
+          git config --global user.email 'r@r.com'
+          git config --global user.name 'Renovate Bot'
+          npm install -g yarn pnpm --cache $(npm_config_cache)
+          npx --cache $(npm_config_cache) --userconfig .npmrc renovate
+        displayName: Renovate the project ${{ parameter.Key }}
+        condition: eq(${{ parameter.Value }}, 'True')
+        env:
+          TOKEN: $(System.AccessToken)
+          GITHUB_COM_TOKEN: $(github.renovator.pat)
+          RENOVATE_REPOSITORIES: $(System.TeamProject)/${{ parameter.Key }}
